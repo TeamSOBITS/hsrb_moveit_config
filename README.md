@@ -32,8 +32,8 @@ ros2 service call /move_hand_to_target_coord sobits_interfaces/srv/MoveHandToTar
     stamp:
       sec: 0
       nanosec: 0
-    frame_id: 'base_footprint'
-  child_frame_id: 'target_frame'
+    frame_id: 'odom'
+  child_frame_id: 'base_footprint'
   transform:
     translation:
       x: 1.0
@@ -59,7 +59,24 @@ ros2 run tf2_ros static_transform_publisher 2.0 1.0 0.7 0.707 0.0 0.707 0.0 odom
 次に、`/move_hand_to_target_tf` サービスを呼び出し、目標のtfフレーム名を指定します。
 
 ```bash
-ros2 service call /move_hand_to_target_tf sobits_interfaces/srv/MoveHandToTargetTf "object_name: 'goal'"
+ros2 service call /move_hand_to_target_tf sobits_interfaces/srv/MoveHandToTargetTF "target_frame: 'goal'
+tf_differential:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: 'odom'
+  child_frame_id: 'base_footprint'
+  transform:
+    translation:
+      x: 0.1
+      y: 0.1
+      z: 0.0
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0"
 ```
 
 ### MoveIt IKデモの起動

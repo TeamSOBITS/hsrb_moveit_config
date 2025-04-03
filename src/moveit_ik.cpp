@@ -25,6 +25,7 @@ public:
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
+    // サービスの作成
     move_hand_to_target_tf_srv_ = this->create_service<sobits_interfaces::srv::MoveHandToTargetTF>(
       "move_hand_to_target_tf",
       std::bind(&MoveHandService::moveHandToTargetTFCallback, this, std::placeholders::_1, std::placeholders::_2));
@@ -33,13 +34,22 @@ public:
       "move_hand_to_target_coord",
       std::bind(&MoveHandService::moveHandToTargetCoordCallback, this, std::placeholders::_1, std::placeholders::_2));
 
+    // パラメータの宣言と取得
     this->declare_parameter("velocity_scaling_factor", 0.5);
     this->declare_parameter("acceleration_scaling_factor", 0.5);
     this->declare_parameter("orientation_yaw_offset", M_PI);
     this->declare_parameter("orientation_pitch", -M_PI / 2.0);
     this->declare_parameter("retry_attempts", 3);
     this->declare_parameter("retry_delay", 1.0);
-    this->declare_parameter("base_frame", "base_link"); // 親フレームのパラメータを追加
+    this->declare_parameter("base_frame", "base_link");
+
+    velocity_scaling_factor_ = this->get_parameter("velocity_scaling_factor").as_double();
+    acceleration_scaling_factor_ = this->get_parameter("acceleration_scaling_factor").as_double();
+    orientation_yaw_offset_ = this->get_parameter("orientation_yaw_offset").as_double();
+    orientation_pitch_ = this->get_parameter("orientation_pitch").as_double();
+    retry_attempts_ = this->get_parameter("retry_attempts").as_int();
+    retry_delay_ = this->get_parameter("retry_delay").as_double();
+    base_frame_ = this->get_parameter("base_frame").as_string();
 
     RCLCPP_INFO(this->get_logger(), "MoveHandServiceが起動しました");
   }
@@ -51,13 +61,22 @@ public:
       rclcpp::Duration(std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::duration<double>(0.1))));
 
-    move_group_->setMaxVelocityScalingFactor(this->get_parameter("velocity_scaling_factor").as_double());
-    move_group_->setMaxAccelerationScalingFactor(this->get_parameter("acceleration_scaling_factor").as_double());
+    move_group_->setMaxVelocityScalingFactor(velocity_scaling_factor_);
+    move_group_->setMaxAccelerationScalingFactor(acceleration_scaling_factor_);
 
     loadJointConstraints(node);
   }
 
 private:
+  // メンバ変数としてパラメータを保持
+  double velocity_scaling_factor_;
+  double acceleration_scaling_factor_;
+  double orientation_yaw_offset_;
+  double orientation_pitch_;
+  int retry_attempts_;
+  double retry_delay_;
+  std::string base_frame_;
+
   void loadJointConstraints(std::shared_ptr<rclcpp::Node> node)
   {
     std::vector<std::string> joint_names = {
@@ -95,11 +114,9 @@ private:
 
   geometry_msgs::msg::Pose modifyPoseForOrientation(const geometry_msgs::msg::Pose &target_pose)
   {
-    double yaw_offset = this->get_parameter("orientation_yaw_offset").as_double();
-    double pitch = this->get_parameter("orientation_pitch").as_double();
-    double yaw = std::atan2(target_pose.position.y, target_pose.position.x) + yaw_offset;
+    double yaw = std::atan2(target_pose.position.y, target_pose.position.x) + orientation_yaw_offset_;
     tf2::Quaternion q;
-    q.setRPY(0.0, pitch, yaw);
+    q.setRPY(0.0, orientation_pitch_, yaw);
     geometry_msgs::msg::Pose modified_pose = target_pose;
     modified_pose.orientation.x = q.x();
     modified_pose.orientation.y = q.y();
@@ -108,19 +125,65 @@ private:
     return modified_pose;
   }
 
+  template <typename ResponseType>
+  bool executeMove(const geometry_msgs::msg::Pose &target_pose, ResponseType &response)
+  {
+    for (int i = 0; i < retry_attempts_; ++i)
+    {
+      move_group_->setPoseTarget(target_pose);
+      moveit::planning_interface::MoveGroupInterface::Plan plan;
+      auto move_result = move_group_->plan(plan);
+
+      if (move_result == moveit::core::MoveItErrorCode::SUCCESS)
+      {
+        std::vector<double> joint_values = plan.trajectory_.joint_trajectory.points.back().positions;
+        response.target_joint_rad = joint_values;
+        response.target_joint_names = move_group_->getJointNames();
+
+        auto move_exec_result = move_group_->move();
+
+        if (move_exec_result == moveit::core::MoveItErrorCode::SUCCESS)
+        {
+          response.success = true;
+          response.move_pose = move_group_->getCurrentPose().pose;
+          return true;
+        }
+        else
+        {
+          response.success = false;
+          response.message = "Move execution failed.";
+          RCLCPP_WARN(this->get_logger(), response.message.c_str());
+        }
+      }
+      else
+      {
+        response.success = false;
+        response.message = "Move planning failed.";
+        RCLCPP_WARN(this->get_logger(), response.message.c_str());
+      }
+      response.success = false;
+      response.message = "Retry attempt: " + std::to_string(i + 1);
+      RCLCPP_INFO(this->get_logger(), response.message.c_str());
+      std::this_thread::sleep_for(std::chrono::duration<double>(retry_delay_));
+    }
+    response.success = false;
+    response.message = "Move failed after " + std::to_string(retry_attempts_) + " attempts.";
+    RCLCPP_ERROR(this->get_logger(), response.message.c_str());
+    return false;
+  }
+
   void moveHandToTargetTFCallback(
       const std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetTF::Request> request,
       std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetTF::Response> response)
   {
     std::string target_frame = request->target_frame;
     geometry_msgs::msg::TransformStamped tf_differential = request->tf_differential;
-    std::string base_frame = this->get_parameter("base_frame").as_string();
     geometry_msgs::msg::Pose target_pose;
 
     try
     {
       geometry_msgs::msg::TransformStamped target_transform_stamped =
-        tf_buffer_->lookupTransform(base_frame, target_frame, tf2::TimePointZero);
+        tf_buffer_->lookupTransform(base_frame_, target_frame, tf2::TimePointZero);
 
       tf2::Transform target_transform;
       tf2::fromMsg(target_transform_stamped.transform, target_transform);
@@ -140,53 +203,16 @@ private:
       return;
     }
 
-    target_pose = modifyPoseForOrientation(target_pose);
+    geometry_msgs::msg::Pose modified_pose = modifyPoseForOrientation(target_pose);
 
-    int retry_attempts = this->get_parameter("retry_attempts").as_int();
-    double retry_delay = this->get_parameter("retry_delay").as_double();
-
-    for (int i = 0; i < retry_attempts; ++i)
+    if (executeMove(modified_pose, *response))
     {
-      move_group_->setPoseTarget(target_pose);
-      moveit::planning_interface::MoveGroupInterface::Plan plan;
-      auto move_result = move_group_->plan(plan);
-
-      if (move_result == moveit::core::MoveItErrorCode::SUCCESS)
-      {
-        std::vector<double> joint_values = plan.trajectory_.joint_trajectory.points.back().positions;
-        response->target_joint_rad = joint_values;
-        response->target_joint_names = move_group_->getJointNames();
-
-        auto move_exec_result = move_group_->move();
-
-        if (move_exec_result == moveit::core::MoveItErrorCode::SUCCESS)
-        {
-          response->success = true;
-          response->message = "MoveHandToTargetTF succeeded.";
-          response->move_pose = move_group_->getCurrentPose().pose;
-          return;
-        }
-        else
-        {
-          response->success = false;
-          response->message = "MoveHandToTargetTF execution failed.";
-          RCLCPP_WARN(this->get_logger(), "MoveHandToTargetTF execution failed. Retrying...");
-        }
-      }
-      else
-      {
-        response->success = false;
-        response->message = "MoveHandToTargetTF planning failed.";
-        RCLCPP_WARN(this->get_logger(), "MoveHandToTargetTF planning failed. Retrying...");
-      }
-      response->success = false;
-      response->message = "Retry attempt: " + std::to_string(i + 1);
-      RCLCPP_INFO(this->get_logger(), response->message.c_str());
-      std::this_thread::sleep_for(std::chrono::duration<double>(retry_delay));
+      response->message = "MoveHandToTargetTF succeeded.";
     }
-    RCLCPP_ERROR(this->get_logger(), ("MoveHandToTargetTF failed after " + std::to_string(retry_attempts) + " attempts.").c_str());
-    response->success = false;
-    response->message = "MoveHandToTargetTF failed after " + std::to_string(retry_attempts) + " attempts.";
+    else
+    {
+      response->message = "MoveHandToTargetTF failed.";
+    }
   }
 
   void moveHandToTargetCoordCallback(
@@ -199,53 +225,16 @@ private:
     target_pose.position.z = request->target_coord.transform.translation.z;
     target_pose.orientation = request->target_coord.transform.rotation;
 
-    target_pose = modifyPoseForOrientation(target_pose);
+    geometry_msgs::msg::Pose modified_pose = modifyPoseForOrientation(target_pose);
 
-    int retry_attempts = this->get_parameter("retry_attempts").as_int();
-    double retry_delay = this->get_parameter("retry_delay").as_double();
-
-    for (int i = 0; i < retry_attempts; ++i)
+    if (executeMove(modified_pose, *response))
     {
-      move_group_->setPoseTarget(target_pose);
-      moveit::planning_interface::MoveGroupInterface::Plan plan;
-      auto move_result = move_group_->plan(plan);
-
-      if (move_result == moveit::core::MoveItErrorCode::SUCCESS)
-      {
-        std::vector<double> joint_values = plan.trajectory_.joint_trajectory.points.back().positions;
-        response->target_joint_rad = joint_values;
-        response->target_joint_names = move_group_->getJointNames();
-
-        auto move_exec_result = move_group_->move();
-
-        if (move_exec_result == moveit::core::MoveItErrorCode::SUCCESS)
-        {
-          response->success = true;
-          response->message = "MoveHandToTargetCoord succeeded.";
-          response->move_pose = move_group_->getCurrentPose().pose;
-          return;
-        }
-        else
-        {
-          response->success = false;
-          response->message = "MoveHandToTargetCoord execution failed.";
-          RCLCPP_WARN(this->get_logger(), "MoveHandToTargetCoord execution failed. Retrying...");
-        }
-      }
-      else
-      {
-        response->success = false;
-        response->message = "MoveHandToTargetCoord planning failed.";
-        RCLCPP_WARN(this->get_logger(), "MoveHandToTargetCoord planning failed. Retrying...");
-      }
-      response->success = false;
-      response->message = "Retry attempt: " + std::to_string(i + 1);
-      RCLCPP_INFO(this->get_logger(), response->message.c_str());
-      std::this_thread::sleep_for(std::chrono::duration<double>(retry_delay));
+      response->message = "MoveHandToTargetCoord succeeded.";
     }
-    RCLCPP_ERROR(this->get_logger(), ("MoveHandToTargetCoord failed after " + std::to_string(retry_attempts) + " attempts.").c_str());
-    response->success = false;
-    response->message = "MoveHandToTargetCoord failed after " + std::to_string(retry_attempts) + " attempts.";
+    else
+    {
+      response->message = "MoveHandToTargetCoord failed.";
+    }
   }
 
   rclcpp::Service<sobits_interfaces::srv::MoveHandToTargetTF>::SharedPtr move_hand_to_target_tf_srv_;

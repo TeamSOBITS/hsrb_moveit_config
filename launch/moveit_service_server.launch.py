@@ -26,7 +26,8 @@ except ImportError:
     )
 
 
-def launch_setup(context, example_name, description_package, description_file, retry_attempts, retry_delay):
+def launch_setup(context, example_name, description_package, description_file, retry_attempts, retry_delay,
+                 velocity_scaling_factor, acceleration_scaling_factor, orientation_yaw_offset, orientation_pitch, base_frame):
     description_package_str = context.perform_substitution(description_package)
     description_file_str = context.perform_substitution(description_file)
 
@@ -37,6 +38,11 @@ def launch_setup(context, example_name, description_package, description_file, r
     robot_name = {'robot_name': LaunchConfiguration('robot_name')}
     retry_attempts_param = {'retry_attempts': int(context.perform_substitution(retry_attempts))}
     retry_delay_param = {'retry_delay': float(context.perform_substitution(retry_delay))}
+    velocity_scaling_factor_param = {'velocity_scaling_factor': float(context.perform_substitution(velocity_scaling_factor))}
+    acceleration_scaling_factor_param = {'acceleration_scaling_factor': float(context.perform_substitution(acceleration_scaling_factor))}
+    orientation_yaw_offset_param = {'orientation_yaw_offset': float(context.perform_substitution(orientation_yaw_offset))}
+    orientation_pitch_param = {'orientation_pitch': float(context.perform_substitution(orientation_pitch))}
+    base_frame_param = {'base_frame': context.perform_substitution(base_frame)}
 
     example_name_str = context.perform_substitution(example_name)
     commander_node = Node(package='hsrb_moveit_config',
@@ -49,7 +55,12 @@ def launch_setup(context, example_name, description_package, description_file, r
                                       kinematics_yaml,
                                       joint_constraints_yaml,
                                       retry_attempts_param,
-                                      retry_delay_param])
+                                      retry_delay_param,
+                                      velocity_scaling_factor_param,
+                                      acceleration_scaling_factor_param,
+                                      orientation_yaw_offset_param,
+                                      orientation_pitch_param,
+                                      base_frame_param])
 
     return [commander_node]
 
@@ -76,8 +87,23 @@ def declare_arguments():
         DeclareLaunchArgument('retry_attempts', default_value='5',
                               description='Number of retry attempts for service calls.'))
     declared_arguments.append(
-        DeclareLaunchArgument('retry_delay', default_value='1.0',
+        DeclareLaunchArgument('retry_delay', default_value='2.0',
                               description='Delay in seconds between retry attempts.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('velocity_scaling_factor', default_value='0.5',
+                              description='Velocity scaling factor for MoveIt.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('acceleration_scaling_factor', default_value='0.5',
+                              description='Acceleration scaling factor for MoveIt.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('orientation_yaw_offset', default_value='3.14159265359',
+                              description='Orientation yaw offset for the hand.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('orientation_pitch', default_value='-1.57079632679',
+                              description='Orientation pitch for the hand.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('base_frame', default_value='base_link',
+                              description='Base frame for TF lookups.'))
     return declared_arguments
 
 
@@ -88,7 +114,12 @@ def generate_launch_description():
                              LaunchConfiguration('description_package'),
                              LaunchConfiguration('description_file'),
                              LaunchConfiguration('retry_attempts'),
-                             LaunchConfiguration('retry_delay')]),
+                             LaunchConfiguration('retry_delay'),
+                             LaunchConfiguration('velocity_scaling_factor'),
+                             LaunchConfiguration('acceleration_scaling_factor'),
+                             LaunchConfiguration('orientation_yaw_offset'),
+                             LaunchConfiguration('orientation_pitch'),
+                             LaunchConfiguration('base_frame')]),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/demo.py']))
     ])

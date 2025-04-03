@@ -25,7 +25,6 @@ public:
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-    // サービスの作成
     move_hand_to_target_tf_srv_ = this->create_service<sobits_interfaces::srv::MoveHandToTargetTF>(
       "move_hand_to_target_tf",
       std::bind(&MoveHandService::moveHandToTargetTFCallback, this, std::placeholders::_1, std::placeholders::_2));
@@ -34,14 +33,13 @@ public:
       "move_hand_to_target_coord",
       std::bind(&MoveHandService::moveHandToTargetCoordCallback, this, std::placeholders::_1, std::placeholders::_2));
 
-    // パラメータの宣言と取得
     this->declare_parameter("velocity_scaling_factor", 0.5);
     this->declare_parameter("acceleration_scaling_factor", 0.5);
     this->declare_parameter("orientation_yaw_offset", M_PI);
     this->declare_parameter("orientation_pitch", -M_PI / 2.0);
-    this->declare_parameter("retry_attempts", 3);
-    this->declare_parameter("retry_delay", 1.0);
-    this->declare_parameter("base_frame", "base_link");
+    this->declare_parameter("retry_attempts", 5);
+    this->declare_parameter("retry_delay", 2.0);
+    this->declare_parameter("base_frame", "odom");
 
     velocity_scaling_factor_ = this->get_parameter("velocity_scaling_factor").as_double();
     acceleration_scaling_factor_ = this->get_parameter("acceleration_scaling_factor").as_double();
@@ -68,7 +66,6 @@ public:
   }
 
 private:
-  // メンバ変数としてパラメータを保持
   double velocity_scaling_factor_;
   double acceleration_scaling_factor_;
   double orientation_yaw_offset_;

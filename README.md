@@ -32,8 +32,8 @@ ros2 service call /move_hand_to_target_coord sobits_interfaces/srv/MoveHandToTar
     stamp:
       sec: 0
       nanosec: 0
-    frame_id: 'odom'
-  child_frame_id: 'base_footprint'
+    frame_id: 'base_footprint'
+  child_frame_id: ''
   transform:
     translation:
       x: 1.0
@@ -65,8 +65,8 @@ tf_differential:
     stamp:
       sec: 0
       nanosec: 0
-    frame_id: 'odom'
-  child_frame_id: 'base_footprint'
+    frame_id: 'base_footprint'
+  child_frame_id: ''
   transform:
     translation:
       x: 0.1

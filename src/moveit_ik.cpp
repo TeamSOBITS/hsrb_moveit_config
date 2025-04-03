@@ -39,7 +39,7 @@ public:
     this->declare_parameter("orientation_pitch", -M_PI / 2.0);
     this->declare_parameter("retry_attempts", 5);
     this->declare_parameter("retry_delay", 2.0);
-    this->declare_parameter("base_frame", "odom");
+    this->declare_parameter("base_frame", "base_footprint");
 
     velocity_scaling_factor_ = this->get_parameter("velocity_scaling_factor").as_double();
     acceleration_scaling_factor_ = this->get_parameter("acceleration_scaling_factor").as_double();

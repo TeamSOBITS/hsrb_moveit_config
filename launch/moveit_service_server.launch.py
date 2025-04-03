@@ -84,7 +84,7 @@ def declare_arguments():
         DeclareLaunchArgument('use_sim_time', default_value='false', choices=['true', 'false'],
                               description='Launch with simulator.'))
     declared_arguments.append(
-        DeclareLaunchArgument('retry_attempts', default_value='5',
+        DeclareLaunchArgument('retry_attempts', default_value='10',
                               description='Number of retry attempts for service calls.'))
     declared_arguments.append(
         DeclareLaunchArgument('retry_delay', default_value='2.0',
@@ -102,7 +102,7 @@ def declare_arguments():
         DeclareLaunchArgument('orientation_pitch', default_value='-1.57079632679',
                               description='Orientation pitch for the hand.'))
     declared_arguments.append(
-        DeclareLaunchArgument('base_frame', default_value='base_link',
+        DeclareLaunchArgument('base_frame', default_value='base_footprint',
                               description='Base frame for TF lookups.'))
     return declared_arguments
 

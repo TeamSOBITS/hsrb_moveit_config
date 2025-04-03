@@ -69,8 +69,8 @@ tf_differential:
   child_frame_id: ''
   transform:
     translation:
-      x: 0.1
-      y: 0.1
+      x: 0.0
+      y: 0.0
       z: 0.0
     rotation:
       x: 0.0

@@ -1,3 +1,5 @@
+※ 現状のmoveitがodom基準の座標に変換してしまうので無理やりbase_footprintに変換しました
+
 # MoveItの実行
 
 このドキュメントでは、Toyota HSR (Human Support Robot) を用いてMoveItを実行するための手順を説明します。

@@ -11,7 +11,7 @@ below) provided that the following conditions are met:
 
 * Redistributions in binary form must reproduce the above copyright notice,
   this list of conditions and the following disclaimer in the documentation
-  and/or other materials provided with the distribution.
+  and/or other materials.
 
 * Neither the name of the copyright holder nor the names of its contributors may be used
   to endorse or promote products derived from this software without specific
@@ -109,13 +109,17 @@ int main(int argc, char** argv) {
   }
 
   moveit_msgs::msg::OrientationConstraint orientation_constraint;
-  orientation_constraint.link_name = whole_body_group.getEndEffectorLink();
   orientation_constraint.header.frame_id = whole_body_group.getPlanningFrame();
   orientation_constraint.orientation = target_pose.orientation;
   orientation_constraint.absolute_x_axis_tolerance = 4.0;
   orientation_constraint.absolute_y_axis_tolerance = 0.1;
   orientation_constraint.absolute_z_axis_tolerance = 0.1;
   orientation_constraint.weight = 1.0;
+
+  // Corrected debug outputs
+  RCLCPP_INFO(logger, "Planning frame: %s", whole_body_group.getPlanningFrame().c_str());
+  RCLCPP_INFO(logger, "End effector link name: %s", whole_body_group.getEndEffectorLink().c_str());
+  orientation_constraint.link_name = whole_body_group.getEndEffectorLink();
 
   moveit_msgs::msg::Constraints constraints;
   constraints.orientation_constraints = {orientation_constraint};

@@ -175,7 +175,7 @@ private:
   {
     std::string target_frame = request->target_frame;
     geometry_msgs::msg::TransformStamped tf_differential = request->tf_differential;
-    geometry_msgs::msg::Pose target_pose;
+    geometry_msgs::msg::Pose target_pose_base_frame;
 
     try
     {
@@ -190,17 +190,46 @@ private:
 
       tf2::Transform final_transform = target_transform * differential_transform;
 
-      tf2::toMsg(final_transform, target_pose);
+      tf2::toMsg(final_transform, target_pose_base_frame);
+
+      RCLCPP_INFO(this->get_logger(), "ターゲットフレーム '%s' の座標 (変換適用後、base_footprint基準):", target_frame.c_str());
+      RCLCPP_INFO(this->get_logger(), "  位置: x=%.3f, y=%.3f, z=%.3f",
+                   target_pose_base_frame.position.x, target_pose_base_frame.position.y, target_pose_base_frame.position.z);
+      RCLCPP_INFO(this->get_logger(), "  回転: x=%.3f, y=%.3f, z=%.3f, w=%.3f",
+                   target_pose_base_frame.orientation.x, target_pose_base_frame.orientation.y,
+                   target_pose_base_frame.orientation.z, target_pose_base_frame.orientation.w);
     }
     catch (const tf2::TransformException &ex)
     {
-      RCLCPP_ERROR(this->get_logger(), "TF lookup failed: %s", ex.what());
+      RCLCPP_ERROR(this->get_logger(), "TF lookup failed (base_footprint -> target): %s", ex.what());
       response->success = false;
-      response->message = "TF lookup failed: " + std::string(ex.what());
+      response->message = "TF lookup failed (base_footprint -> target): " + std::string(ex.what());
       return;
     }
 
-    geometry_msgs::msg::Pose modified_pose = modifyPoseForOrientation(target_pose);
+    geometry_msgs::msg::Pose target_pose_odom_compensated = target_pose_base_frame;
+
+    try
+    {
+      geometry_msgs::msg::TransformStamped base_footprint_to_odom_transform_stamped =
+        tf_buffer_->lookupTransform("odom", base_frame_, tf2::TimePointZero);
+
+      target_pose_odom_compensated.position.x += base_footprint_to_odom_transform_stamped.transform.translation.x;
+      target_pose_odom_compensated.position.y += base_footprint_to_odom_transform_stamped.transform.translation.y;
+
+      RCLCPP_INFO(this->get_logger(), "ターゲット座標 (odomのオフセットを加算後):");
+      RCLCPP_INFO(this->get_logger(), "  位置: x=%.3f, y=%.3f, z=%.3f",
+                   target_pose_odom_compensated.position.x, target_pose_odom_compensated.position.y, target_pose_odom_compensated.position.z);
+      RCLCPP_INFO(this->get_logger(), "  回転: x=%.3f, y=%.3f, z=%.3f, w=%.3f",
+                   target_pose_odom_compensated.orientation.x, target_pose_odom_compensated.orientation.y,
+                   target_pose_odom_compensated.orientation.z, target_pose_odom_compensated.orientation.w);
+    }
+    catch (const tf2::TransformException &ex)
+    {
+      RCLCPP_WARN(this->get_logger(), "TF lookup failed (odom -> base_footprint), odom offset not applied: %s", ex.what());
+    }
+
+    geometry_msgs::msg::Pose modified_pose = modifyPoseForOrientation(target_pose_odom_compensated);
 
     if (executeMove(modified_pose, *response))
     {
@@ -216,13 +245,35 @@ private:
       const std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetCoord::Request> request,
       std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetCoord::Response> response)
   {
-    geometry_msgs::msg::Pose target_pose;
-    target_pose.position.x = request->target_coord.transform.translation.x;
-    target_pose.position.y = request->target_coord.transform.translation.y;
-    target_pose.position.z = request->target_coord.transform.translation.z;
-    target_pose.orientation = request->target_coord.transform.rotation;
+    geometry_msgs::msg::Pose target_pose_base_frame;
+    target_pose_base_frame.position.x = request->target_coord.transform.translation.x;
+    target_pose_base_frame.position.y = request->target_coord.transform.translation.y;
+    target_pose_base_frame.position.z = request->target_coord.transform.translation.z;
+    target_pose_base_frame.orientation = request->target_coord.transform.rotation;
 
-    geometry_msgs::msg::Pose modified_pose = modifyPoseForOrientation(target_pose);
+    geometry_msgs::msg::Pose target_pose_odom_compensated = target_pose_base_frame;
+
+    try
+    {
+      geometry_msgs::msg::TransformStamped base_footprint_to_odom_transform_stamped =
+        tf_buffer_->lookupTransform("odom", base_frame_, tf2::TimePointZero);
+
+      target_pose_odom_compensated.position.x += base_footprint_to_odom_transform_stamped.transform.translation.x;
+      target_pose_odom_compensated.position.y += base_footprint_to_odom_transform_stamped.transform.translation.y;
+
+      RCLCPP_INFO(this->get_logger(), "目標座標 (odomのオフセットを加算後):");
+      RCLCPP_INFO(this->get_logger(), "  位置: x=%.3f, y=%.3f, z=%.3f",
+                   target_pose_odom_compensated.position.x, target_pose_odom_compensated.position.y, target_pose_odom_compensated.position.z);
+      RCLCPP_INFO(this->get_logger(), "  回転: x=%.3f, y=%.3f, z=%.3f",
+                   target_pose_odom_compensated.orientation.x, target_pose_odom_compensated.orientation.y,
+                   target_pose_odom_compensated.orientation.z, target_pose_odom_compensated.orientation.w);
+    }
+    catch (const tf2::TransformException &ex)
+    {
+      RCLCPP_WARN(this->get_logger(), "TF lookup failed (odom -> base_footprint), odom offset not applied: %s", ex.what());
+    }
+
+    geometry_msgs::msg::Pose modified_pose = modifyPoseForOrientation(target_pose_odom_compensated);
 
     if (executeMove(modified_pose, *response))
     {

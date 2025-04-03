@@ -27,24 +27,23 @@ ros2 launch hsrb_moveit_config moveit_service_server.launch.py
 以下のコマンドを実行すると、HSRの手先が指定された座標へ移動します。
 
 ```bash
-ros2 service call /move_hand_to_target_coord hsrb_moveit_interfaces/srv/MoveHandToTargetCoord "pose:
-  position:
-    x: 1.0
-    y: 1.0
-    z: 0.7
-  orientation:
-    x: 0.707
-    y: 0.0
-    z: 0.707
-    w: 0.0"
-```
-
-### MoveIt IKデモの起動
-
-以下のコマンドを実行すると、MoveItの逆運動学 (IK) のデモが起動します。
-
-```bash
-ros2 launch hsrb_moveit_config hsrb_example.launch.py example_name:=moveit_ik_demo
+ros2 service call /move_hand_to_target_coord sobits_interfaces/srv/MoveHandToTargetCoord "target_coord:
+  header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: 'base_footprint'
+  child_frame_id: 'target_frame'
+  transform:
+    translation:
+      x: 1.0
+      y: 1.0
+      z: 0.7
+    rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 0.0"
 ```
 
 ### tfフレームに基づいて手先を移動させる (サービス呼び出し)
@@ -60,34 +59,18 @@ ros2 run tf2_ros static_transform_publisher 2.0 1.0 0.7 0.707 0.0 0.707 0.0 odom
 次に、`/move_hand_to_target_tf` サービスを呼び出し、目標のtfフレーム名を指定します。
 
 ```bash
-ros2 service call /move_hand_to_target_tf hsrb_moveit_interfaces/srv/MoveHandToTargetTf "object_name: 'goal'"
+ros2 service call /move_hand_to_target_tf sobits_interfaces/srv/MoveHandToTargetTf "object_name: 'goal'"
 ```
 
-## サービスインターフェース定義
+### MoveIt IKデモの起動
 
-以下は、テストで使用したサービスのインターフェース定義です。
+以下のコマンドを実行すると、MoveItの逆運動学 (IK) のデモが起動します。
 
-### move_hand_to_target_coord サービス
-
-```
-geometry_msgs/Pose pose
-  Point position
-    float64 x
-    float64 y
-    float64 z
-  Quaternion orientation
-    float64 x
-    float64 y
-    float64 z
-    float64 w
----
-bool success
+```bash
+ros2 launch hsrb_moveit_config hsrb_example.launch.py example_name:=moveit_ik_demo
 ```
 
-### move_hand_to_target_tf サービス
-
-```
-string object_name
----
-bool success
-```
+## 今後の開発
+* ロボットから目標地点の向きで横からの把持にしか対応していない
+  * 物体の姿勢や配置を考慮した把持位置の推定が必要
+* 目標地点の基準を修正

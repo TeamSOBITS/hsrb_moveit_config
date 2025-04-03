@@ -26,7 +26,7 @@ except ImportError:
     )
 
 
-def launch_setup(context, example_name, description_package, description_file):
+def launch_setup(context, example_name, description_package, description_file, retry_attempts, retry_delay):
     description_package_str = context.perform_substitution(description_package)
     description_file_str = context.perform_substitution(description_file)
 
@@ -35,6 +35,8 @@ def launch_setup(context, example_name, description_package, description_file):
     kinematics_yaml = load_yaml('config/kinematics.yaml')
     joint_constraints_yaml = load_yaml('config/joint_constraints.yaml')
     robot_name = {'robot_name': LaunchConfiguration('robot_name')}
+    retry_attempts_param = {'retry_attempts': int(context.perform_substitution(retry_attempts))}
+    retry_delay_param = {'retry_delay': float(context.perform_substitution(retry_delay))}
 
     example_name_str = context.perform_substitution(example_name)
     commander_node = Node(package='hsrb_moveit_config',
@@ -45,7 +47,9 @@ def launch_setup(context, example_name, description_package, description_file):
                                       robot_description_semantic,
                                       robot_name,
                                       kinematics_yaml,
-                                      joint_constraints_yaml])
+                                      joint_constraints_yaml,
+                                      retry_attempts_param,
+                                      retry_delay_param])
 
     return [commander_node]
 
@@ -68,6 +72,12 @@ def declare_arguments():
     declared_arguments.append(
         DeclareLaunchArgument('use_sim_time', default_value='false', choices=['true', 'false'],
                               description='Launch with simulator.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('retry_attempts', default_value='3',
+                              description='Number of retry attempts for service calls.'))
+    declared_arguments.append(
+        DeclareLaunchArgument('retry_delay', default_value='3.0',
+                              description='Delay in seconds between retry attempts.'))
     return declared_arguments
 
 
@@ -76,7 +86,9 @@ def generate_launch_description():
         OpaqueFunction(function=launch_setup,
                        args=[LaunchConfiguration('example_name'),
                              LaunchConfiguration('description_package'),
-                             LaunchConfiguration('description_file')]),
+                             LaunchConfiguration('description_file'),
+                             LaunchConfiguration('retry_attempts'),
+                             LaunchConfiguration('retry_delay')]),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([ThisLaunchFileDir(), '/demo.py']))
     ])

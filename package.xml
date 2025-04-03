@@ -20,7 +20,7 @@
 
   <depend>moveit_ros</depend>
   <depend>rclcpp</depend>
-  <depend>hsrb_moveit_interfaces</depend>
+  <depend>sobits_interfaces</depend>
   <depend>rosidl_default_generators</depend>
   
   <exec_depend>ament_index_python</exec_depend>

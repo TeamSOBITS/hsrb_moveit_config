@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10.2)
 project(hsrb_moveit_config)
 
 find_package(ament_cmake REQUIRED)
-find_package(hsrb_moveit_interfaces REQUIRED)
+find_package(sobits_interfaces REQUIRED)
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -28,7 +28,7 @@ ament_target_dependencies(moveit_ik_demo moveit_ros_planning_interface rclcpp)
 
 add_executable(moveit_ik src/moveit_ik.cpp)
 target_include_directories(moveit_ik PUBLIC include ${EIGEN3_INCLUDE_DIR})
-ament_target_dependencies(moveit_ik moveit_ros_planning_interface rclcpp hsrb_moveit_interfaces geometry_msgs)
+ament_target_dependencies(moveit_ik moveit_ros_planning_interface rclcpp sobits_interfaces geometry_msgs)
 
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})

@@ -15,7 +15,7 @@
 #include <moveit_msgs/msg/joint_constraint.hpp>
 #include <moveit_msgs/msg/constraints.hpp>
 #include <vector>
-#include <thread> // std::this_thread::sleep_for用
+#include <thread>
 
 class MoveHandService : public rclcpp::Node
 {
@@ -39,6 +39,7 @@ public:
     this->declare_parameter("orientation_pitch", -M_PI / 2.0);
     this->declare_parameter("retry_attempts", 3);
     this->declare_parameter("retry_delay", 1.0);
+    this->declare_parameter("base_frame", "base_link"); // 親フレームのパラメータを追加
 
     RCLCPP_INFO(this->get_logger(), "MoveHandServiceが起動しました");
   }
@@ -111,19 +112,39 @@ private:
       const std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetTF::Request> request,
       std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetTF::Response> response)
   {
-    // 1. TF変換の処理 (request->tf_differential から target_pose を計算)
+    std::string target_frame = request->target_frame;
+    geometry_msgs::msg::TransformStamped tf_differential = request->tf_differential;
+    std::string base_frame = this->get_parameter("base_frame").as_string();
     geometry_msgs::msg::Pose target_pose;
-    target_pose.position.x = request->tf_differential.transform.translation.x;
-    target_pose.position.y = request->tf_differential.transform.translation.y;
-    target_pose.position.z = request->tf_differential.transform.translation.z;
-    target_pose.orientation = request->tf_differential.transform.rotation;
+
+    try
+    {
+      geometry_msgs::msg::TransformStamped target_transform_stamped =
+        tf_buffer_->lookupTransform(base_frame, target_frame, tf2::TimePointZero);
+
+      tf2::Transform target_transform;
+      tf2::fromMsg(target_transform_stamped.transform, target_transform);
+
+      tf2::Transform differential_transform;
+      tf2::fromMsg(tf_differential.transform, differential_transform);
+
+      tf2::Transform final_transform = target_transform * differential_transform;
+
+      tf2::toMsg(final_transform, target_pose);
+    }
+    catch (const tf2::TransformException &ex)
+    {
+      RCLCPP_ERROR(this->get_logger(), "TF lookup failed: %s", ex.what());
+      response->success = false;
+      response->message = "TF lookup failed: " + std::string(ex.what());
+      return;
+    }
 
     target_pose = modifyPoseForOrientation(target_pose);
 
     int retry_attempts = this->get_parameter("retry_attempts").as_int();
     double retry_delay = this->get_parameter("retry_delay").as_double();
 
-    // 2. MoveItによる計画と実行 (最大retry_attempts回まで再試行)
     for (int i = 0; i < retry_attempts; ++i)
     {
       move_group_->setPoseTarget(target_pose);
@@ -143,7 +164,7 @@ private:
           response->success = true;
           response->message = "MoveHandToTargetTF succeeded.";
           response->move_pose = move_group_->getCurrentPose().pose;
-          return; // 成功したらループを抜ける
+          return;
         }
         else
         {
@@ -158,13 +179,12 @@ private:
         response->message = "MoveHandToTargetTF planning failed.";
         RCLCPP_WARN(this->get_logger(), "MoveHandToTargetTF planning failed. Retrying...");
       }
-      // レスポンスを送信
       response->success = false;
       response->message = "Retry attempt: " + std::to_string(i + 1);
-      RCLCPP_INFO(this->get_logger(), response->message.c_str()); // c_str()を追加
+      RCLCPP_INFO(this->get_logger(), response->message.c_str());
       std::this_thread::sleep_for(std::chrono::duration<double>(retry_delay));
     }
-    RCLCPP_ERROR(this->get_logger(), ("MoveHandToTargetTF failed after " + std::to_string(retry_attempts) + " attempts.").c_str()); // c_str()を追加
+    RCLCPP_ERROR(this->get_logger(), ("MoveHandToTargetTF failed after " + std::to_string(retry_attempts) + " attempts.").c_str());
     response->success = false;
     response->message = "MoveHandToTargetTF failed after " + std::to_string(retry_attempts) + " attempts.";
   }
@@ -173,7 +193,6 @@ private:
       const std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetCoord::Request> request,
       std::shared_ptr<sobits_interfaces::srv::MoveHandToTargetCoord::Response> response)
   {
-    // 1. target_coord から target_pose を作成
     geometry_msgs::msg::Pose target_pose;
     target_pose.position.x = request->target_coord.transform.translation.x;
     target_pose.position.y = request->target_coord.transform.translation.y;
@@ -185,7 +204,6 @@ private:
     int retry_attempts = this->get_parameter("retry_attempts").as_int();
     double retry_delay = this->get_parameter("retry_delay").as_double();
 
-    // 2. MoveItによる計画と実行 (最大retry_attempts回まで再試行)
     for (int i = 0; i < retry_attempts; ++i)
     {
       move_group_->setPoseTarget(target_pose);
@@ -205,7 +223,7 @@ private:
           response->success = true;
           response->message = "MoveHandToTargetCoord succeeded.";
           response->move_pose = move_group_->getCurrentPose().pose;
-          return; // 成功したらループを抜ける
+          return;
         }
         else
         {
@@ -220,13 +238,12 @@ private:
         response->message = "MoveHandToTargetCoord planning failed.";
         RCLCPP_WARN(this->get_logger(), "MoveHandToTargetCoord planning failed. Retrying...");
       }
-      // レスポンスを送信
       response->success = false;
       response->message = "Retry attempt: " + std::to_string(i + 1);
-      RCLCPP_INFO(this->get_logger(), response->message.c_str()); // c_str()を追加
+      RCLCPP_INFO(this->get_logger(), response->message.c_str());
       std::this_thread::sleep_for(std::chrono::duration<double>(retry_delay));
     }
-    RCLCPP_ERROR(this->get_logger(), ("MoveHandToTargetCoord failed after " + std::to_string(retry_attempts) + " attempts.").c_str()); // c_str()を追加
+    RCLCPP_ERROR(this->get_logger(), ("MoveHandToTargetCoord failed after " + std::to_string(retry_attempts) + " attempts.").c_str());
     response->success = false;
     response->message = "MoveHandToTargetCoord failed after " + std::to_string(retry_attempts) + " attempts.";
   }

@@ -73,10 +73,10 @@ def declare_arguments():
         DeclareLaunchArgument('use_sim_time', default_value='false', choices=['true', 'false'],
                               description='Launch with simulator.'))
     declared_arguments.append(
-        DeclareLaunchArgument('retry_attempts', default_value='3',
+        DeclareLaunchArgument('retry_attempts', default_value='5',
                               description='Number of retry attempts for service calls.'))
     declared_arguments.append(
-        DeclareLaunchArgument('retry_delay', default_value='3.0',
+        DeclareLaunchArgument('retry_delay', default_value='1.0',
                               description='Delay in seconds between retry attempts.'))
     return declared_arguments
 
